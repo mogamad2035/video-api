@@ -49,6 +49,41 @@ app.post(
   }
 );
 
+app.post("/merge", upload.array("clips", 20), (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).send("clips are required");
+    }
+
+    const listFilePath = path.join("/tmp", `list-${Date.now()}.txt`);
+    const outputPath = path.join("/tmp", `final-${Date.now()}.mp4`);
+
+    const listContent = req.files
+      .map((file) => `file '${file.path}'`)
+      .join("\n");
+
+    fs.writeFileSync(listFilePath, listContent);
+
+    const cmd = `ffmpeg -f concat -safe 0 -i "${listFilePath}" -c copy -y "${outputPath}"`;
+
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) {
+        console.error(stderr);
+        return res.status(500).send("merge failed");
+      }
+
+      res.download(outputPath, "final.mp4", () => {
+        [...req.files.map((f) => f.path), listFilePath, outputPath].forEach((file) => {
+          if (fs.existsSync(file)) fs.unlinkSync(file);
+        });
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("server error");
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
